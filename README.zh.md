@@ -1,5 +1,5 @@
 # HTML 可视化编辑器
-原项目自大佬cxq0517的https://github.com/cxq0517/htmltool2
+原项目自cxq0517大佬的https://github.com/cxq0517/htmltool2
 
 可直接访问https://myd9.github.io/htmltool3/
 

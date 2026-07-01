@@ -1,5 +1,5 @@
 # HTML 可视化编辑器
-原项目自https://github.com/cxq0517/htmltool2
+原项目自大佬cxq0517的https://github.com/cxq0517/htmltool2
 
 一个极简、完全本地运行的所见即所得 HTML 编辑器，适合微调 AI 生成的单页 HTML。
 

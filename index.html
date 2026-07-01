@@ -1,0 +1,1500 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HTML 编辑器</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0; padding: 0; height: 100%;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      background: #f3f4f6;
+      color: #1f2937;
+      overflow: hidden;
+    }
+    #editor-shell {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      width: 100vw;
+    }
+    .toolbar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      background: rgba(255, 255, 255, 0.96);
+      border-bottom: 1px solid #e5e7eb;
+      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+      flex-shrink: 0;
+      z-index: 100;
+      backdrop-filter: blur(10px);
+    }
+    .toolbar button {
+      min-height: 32px;
+      padding: 6px 12px;
+      border: 1px solid #d1d5db;
+      background: white;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      color: #1f2937;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+    .toolbar button:hover:not(:disabled) {
+      background: #f9fafb;
+      border-color: #9ca3af;
+      transform: translateY(-1px);
+    }
+    .toolbar button:active:not(:disabled) { transform: translateY(0); }
+    .toolbar button:disabled { opacity: 0.45; cursor: not-allowed; }
+    .toolbar button.primary {
+      background: #2563eb; color: white; border-color: #2563eb;
+      box-shadow: 0 1px 2px rgba(37, 99, 235, 0.25);
+    }
+    .toolbar button.primary:hover:not(:disabled) { background: #1d4ed8; border-color: #1d4ed8; }
+    .toolbar .switch {
+      display: flex; align-items: center; gap: 8px;
+      cursor: pointer; user-select: none; font-size: 13px;
+      color: #374151;
+      padding: 4px 8px 4px 4px;
+      border: 1px solid #e5e7eb;
+      border-radius: 999px;
+      background: #f9fafb;
+    }
+    .toolbar .switch:has(input:checked) {
+      color: #1d4ed8;
+      border-color: #bfdbfe;
+      background: #eff6ff;
+    }
+    .toolbar .switch:has(input:disabled) { opacity: 0.55; cursor: not-allowed; }
+    .toolbar .switch input { width: 36px; height: 20px; cursor: pointer; margin: 0; accent-color: #2563eb; }
+    .toolbar .spacer { flex: 1; }
+    .toolbar .file-name {
+      color: #374151; font-size: 12px; max-width: 300px;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      padding: 6px 10px; background: #f3f4f6; border-radius: 999px;
+      border: 1px solid #e5e7eb;
+    }
+    .toolbar .file-name:empty { display: none; }
+    .status-badge {
+      display: none;
+      align-items: center;
+      gap: 6px;
+      color: #64748b;
+      font-size: 12px;
+      padding: 6px 9px;
+      border-radius: 999px;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      white-space: nowrap;
+    }
+    .status-badge.visible { display: inline-flex; }
+    .status-badge.dirty {
+      color: #92400e;
+      background: #fffbeb;
+      border-color: #fde68a;
+    }
+    .status-badge::before {
+      content: "";
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #94a3b8;
+    }
+    .status-badge.dirty::before { background: #f59e0b; }
+    .canvas {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+      background:
+        linear-gradient(45deg, #f8fafc 25%, transparent 25%),
+        linear-gradient(-45deg, #f8fafc 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, #f8fafc 75%),
+        linear-gradient(-45deg, transparent 75%, #f8fafc 75%);
+      background-size: 24px 24px;
+      background-position: 0 0, 0 12px, 12px -12px, -12px 0;
+    }
+    .canvas.drag-over::after {
+      content: "";
+      position: absolute;
+      inset: 14px;
+      border: 2px dashed #2563eb;
+      border-radius: 14px;
+      background: rgba(37, 99, 235, 0.08);
+      pointer-events: none;
+      z-index: 9996;
+    }
+    .placeholder {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      color: #6b7280; font-size: 15px; pointer-events: none; gap: 12px;
+      text-align: center;
+      padding: 24px;
+    }
+    .placeholder .icon {
+      display: grid;
+      place-items: center;
+      width: 72px;
+      height: 72px;
+      border-radius: 18px;
+      background: white;
+      border: 1px solid #e5e7eb;
+      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+      font-size: 36px;
+    }
+    .placeholder .hint { font-size: 13px; color: #94a3b8; }
+    iframe#viewer {
+      width: 100%; height: 100%; border: none; background: white; display: none;
+    }
+    iframe#viewer.loaded { display: block; }
+    .edit-hint {
+      position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%);
+      background: rgba(31, 41, 55, 0.9); color: white;
+      padding: 8px 16px; border-radius: 20px; font-size: 12px;
+      z-index: 9997; pointer-events: none; opacity: 0;
+      transition: opacity 0.2s; white-space: nowrap;
+    }
+    .edit-hint.visible { opacity: 1; }
+    .overlay {
+      position: fixed; pointer-events: none; z-index: 9998;
+      display: none; border-radius: 2px;
+    }
+    .overlay.visible { display: block; }
+    #hover-overlay {
+      border: 2px solid #3b82f6;
+      background: rgba(59, 130, 246, 0.06);
+      transition: all 0.08s ease-out;
+    }
+    #selected-overlay {
+      border: 2px solid #f59e0b;
+      background: rgba(245, 158, 11, 0.05);
+      pointer-events: auto;
+      cursor: move;
+      touch-action: none;
+      user-select: none;
+    }
+    #selected-overlay.transforming {
+      background: rgba(245, 158, 11, 0.1);
+    }
+    .resize-handle {
+      position: absolute;
+      width: 10px;
+      height: 10px;
+      border: 2px solid #f59e0b;
+      border-radius: 2px;
+      background: white;
+      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.2);
+      pointer-events: auto;
+    }
+    .resize-handle[data-handle="nw"] { left: 0; top: 0; transform: translate(-50%, -50%); cursor: nwse-resize; }
+    .resize-handle[data-handle="n"]  { left: 50%; top: 0; transform: translate(-50%, -50%); cursor: ns-resize; }
+    .resize-handle[data-handle="ne"] { right: 0; top: 0; transform: translate(50%, -50%); cursor: nesw-resize; }
+    .resize-handle[data-handle="e"]  { right: 0; top: 50%; transform: translate(50%, -50%); cursor: ew-resize; }
+    .resize-handle[data-handle="se"] { right: 0; bottom: 0; transform: translate(50%, 50%); cursor: nwse-resize; }
+    .resize-handle[data-handle="s"]  { left: 50%; bottom: 0; transform: translate(-50%, 50%); cursor: ns-resize; }
+    .resize-handle[data-handle="sw"] { left: 0; bottom: 0; transform: translate(-50%, 50%); cursor: nesw-resize; }
+    .resize-handle[data-handle="w"]  { left: 0; top: 50%; transform: translate(-50%, -50%); cursor: ew-resize; }
+    #selection-size {
+      position: absolute;
+      left: 50%;
+      top: -28px;
+      transform: translateX(-50%);
+      padding: 3px 7px;
+      border-radius: 5px;
+      background: #1f2937;
+      color: white;
+      font-size: 11px;
+      line-height: 1.2;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+      pointer-events: none;
+    }
+    #color-panel {
+      position: fixed; background: white; border: 1px solid #e5e7eb;
+      border-radius: 12px; box-shadow: 0 18px 45px rgba(15, 23, 42, 0.18);
+      padding: 14px; width: 282px; z-index: 10000; font-size: 13px;
+    }
+    #color-panel[hidden] { display: none; }
+    .panel-header {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid #f3f4f6;
+    }
+    .panel-header .element-info { font-size: 12px; color: #6b7280; }
+    .panel-header .element-info code {
+      color: #1f2937; background: #f3f4f6; padding: 2px 8px; border-radius: 4px;
+      font-size: 11px; font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      max-width: 180px; display: inline-block; overflow: hidden;
+      text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom;
+    }
+    .panel-close {
+      background: none; border: none; cursor: pointer; font-size: 20px;
+      color: #9ca3af; padding: 0; width: 22px; height: 22px;
+      line-height: 1; border-radius: 4px;
+    }
+    .panel-close:hover { color: #1f2937; background: #f3f4f6; }
+    .panel-section { margin-bottom: 14px; }
+    .panel-section:last-child { margin-bottom: 0; }
+    .panel-section > label {
+      display: block; font-size: 12px; color: #6b7280;
+      margin-bottom: 6px; font-weight: 500;
+    }
+    .color-row { display: flex; align-items: center; gap: 6px; }
+    .color-row input[type="color"] {
+      width: 38px; height: 32px; border: 1px solid #d1d5db;
+      border-radius: 6px; cursor: pointer; padding: 2px; background: white;
+    }
+    .color-row input[type="text"] {
+      flex: 1; padding: 7px 9px; border: 1px solid #d1d5db;
+      border-radius: 6px; font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      font-size: 12px; min-width: 0;
+    }
+    .color-row input[type="text"]:focus { outline: none; border-color: #3b82f6; }
+    .color-row .clear-btn {
+      padding: 7px 10px; font-size: 11px; background: #f9fafb;
+      border: 1px solid #d1d5db; border-radius: 6px; cursor: pointer;
+      color: #6b7280; white-space: nowrap;
+    }
+    .color-row .clear-btn:hover { background: #f3f4f6; color: #1f2937; }
+    .swatches { display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; }
+    .swatch {
+      width: 100%; aspect-ratio: 1; border: 1px solid #d1d5db;
+      border-radius: 6px; cursor: pointer; padding: 0; transition: transform 0.1s, box-shadow 0.1s;
+    }
+    .swatch:hover { transform: scale(1.15); box-shadow: 0 2px 6px rgba(0,0,0,0.2); }
+    /* ============== 浮动色板按钮(hover 时显示) ============== */
+    #color-button {
+      position: fixed;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: white;
+      border: 1px solid #d1d5db;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.18);
+      cursor: pointer;
+      z-index: 9999;
+      padding: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      line-height: 1;
+      transition: transform 0.1s, background 0.1s;
+    }
+    #color-button:hover {
+      background: #f9fafb;
+      transform: scale(1.12);
+    }
+    #color-button[hidden] { display: none; }
+    @media (max-width: 720px) {
+      .toolbar {
+        flex-wrap: wrap;
+        gap: 8px;
+        padding: 8px;
+      }
+      .toolbar .spacer { display: none; }
+      .toolbar .file-name {
+        order: 10;
+        max-width: none;
+        flex: 1 1 100%;
+      }
+      .status-badge { order: 11; }
+      .edit-hint {
+        max-width: calc(100vw - 24px);
+        white-space: normal;
+        text-align: center;
+        border-radius: 12px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="editor-shell">
+    <header class="toolbar">
+      <button id="btn-open" class="primary">📁 打开 HTML</button>
+      <input type="file" id="file-input" accept=".html,.htm" hidden>
+      <span class="file-name" id="file-name"></span>
+      <span class="status-badge" id="status-badge">未修改</span>
+      <span class="spacer"></span>
+      <label class="switch">
+        <input type="checkbox" id="toggle-edit" disabled>
+        <span>编辑模式</span>
+      </label>
+      <label class="switch" title="用于需要 JavaScript 的 PPT、翻页、动画页面。仅打开可信 HTML。">
+        <input type="checkbox" id="toggle-scripts" disabled>
+        <span>交互预览</span>
+      </label>
+      <button id="btn-reset" disabled>↺ 重置</button>
+      <button id="btn-save" disabled>💾 保存</button>
+    </header>
+    <main class="canvas">
+      <div class="placeholder" id="placeholder">
+        <div class="icon">📄</div>
+        <div>点击「打开 HTML」加载文件,或将 HTML 文件拖到此处</div>
+        <div class="hint">所有处理均在本地完成,文件不会上传</div>
+      </div>
+      <iframe id="viewer" sandbox="allow-same-origin"></iframe>
+      <div class="edit-hint" id="edit-hint">
+        点文字改文字 · 点空白处选中元素 · 拖动选框移动 · 拖动控制点缩放 · 点 🎨 改颜色
+      </div>
+    </main>
+  </div>
+
+  <div id="hover-overlay" class="overlay"></div>
+  <div id="selected-overlay" class="overlay" title="拖动以移动元素">
+    <span id="selection-size"></span>
+    <span class="resize-handle" data-handle="nw"></span>
+    <span class="resize-handle" data-handle="n"></span>
+    <span class="resize-handle" data-handle="ne"></span>
+    <span class="resize-handle" data-handle="e"></span>
+    <span class="resize-handle" data-handle="se"></span>
+    <span class="resize-handle" data-handle="s"></span>
+    <span class="resize-handle" data-handle="sw"></span>
+    <span class="resize-handle" data-handle="w"></span>
+  </div>
+  <button id="color-button" hidden title="修改此元素颜色">🎨</button>
+
+  <div id="color-panel" hidden>
+    <div class="panel-header">
+      <span class="element-info">元素: <code id="el-tag"></code></span>
+      <button class="panel-close" id="panel-close" title="关闭 (Esc)">×</button>
+    </div>
+    <div class="panel-section">
+      <label>背景色</label>
+      <div class="color-row">
+        <input type="color" id="bg-color" value="#ffffff">
+        <input type="text" id="bg-color-text" value="#ffffff" maxlength="7" spellcheck="false">
+        <button class="clear-btn" data-clear="backgroundColor">清除</button>
+      </div>
+    </div>
+    <div class="panel-section">
+      <label>文字色</label>
+      <div class="color-row">
+        <input type="color" id="text-color" value="#000000">
+        <input type="text" id="text-color-text" value="#000000" maxlength="7" spellcheck="false">
+        <button class="clear-btn" data-clear="color">清除</button>
+      </div>
+    </div>
+    <div class="panel-section">
+      <label>快捷调色板(背景)</label>
+      <div class="swatches" id="swatches"></div>
+    </div>
+  </div>
+
+  <script>
+  (function() {
+    'use strict';
+
+    const state = {
+      originalHTML: '',
+      currentFileName: '',
+      isEditMode: false,
+      allowScripts: false,
+      selectedElement: null,
+      hoveredElement: null,
+      iframeReady: false,
+      isDirty: false,
+      isSaving: false,
+      activeTransform: null,
+      history: [],
+      historyIndex: -1,
+      savedSnapshot: '',
+      historyTimer: null,
+      pendingHistoryReset: false,
+      isRestoringHistory: false,
+      activeTextElement: null,
+      activeTextOriginalContentEditable: null,
+    };
+
+    const $ = id => document.getElementById(id);
+    const fileInput = $('file-input');
+    const btnOpen = $('btn-open');
+    const btnSave = $('btn-save');
+    const btnReset = $('btn-reset');
+    const toggleEdit = $('toggle-edit');
+    const toggleScripts = $('toggle-scripts');
+    const fileName = $('file-name');
+    const statusBadge = $('status-badge');
+    const placeholder = $('placeholder');
+    const viewer = $('viewer');
+    const hoverOverlay = $('hover-overlay');
+    const selectedOverlay = $('selected-overlay');
+    const selectionSize = $('selection-size');
+    const colorPanel = $('color-panel');
+    const editHint = $('edit-hint');
+    const elTag = $('el-tag');
+    const bgColor = $('bg-color');
+    const bgColorText = $('bg-color-text');
+    const textColor = $('text-color');
+    const textColorText = $('text-color-text');
+    const swatches = $('swatches');
+    const panelClose = $('panel-close');
+    const colorButton = $('color-button');
+
+    const SWATCH_COLORS = [
+      '#ffffff', '#000000', '#ef4444', '#f97316',
+      '#eab308', '#22c55e', '#3b82f6', '#a855f7',
+      '#ec4899', '#06b6d4', '#84cc16', '#f59e0b',
+      '#6b7280', '#1f2937', '#fee2e2', '#dbeafe',
+    ];
+
+    function initSwatches() {
+      SWATCH_COLORS.forEach(color => {
+        const btn = document.createElement('button');
+        btn.className = 'swatch';
+        btn.style.backgroundColor = color;
+        btn.dataset.color = color;
+        btn.title = color;
+        btn.addEventListener('click', e => {
+          e.stopPropagation();
+          applyColor('backgroundColor', color);
+        });
+        swatches.appendChild(btn);
+      });
+    }
+
+    function setDirty(isDirty) {
+      state.isDirty = isDirty;
+      updateStatus();
+    }
+
+    function updateStatus() {
+      if (!state.currentFileName) {
+        statusBadge.classList.remove('visible', 'dirty');
+        statusBadge.textContent = '未修改';
+        return;
+      }
+      statusBadge.classList.add('visible');
+      statusBadge.classList.toggle('dirty', state.isDirty);
+      statusBadge.textContent = state.isDirty ? '有修改' : '未修改';
+    }
+
+    const HISTORY_LIMIT = 100;
+    const HISTORY_DEBOUNCE_MS = 350;
+
+    function resetHistory(snapshot) {
+      if (state.historyTimer) {
+        clearTimeout(state.historyTimer);
+        state.historyTimer = null;
+      }
+      state.history = [snapshot];
+      state.historyIndex = 0;
+      state.savedSnapshot = snapshot;
+      setDirty(false);
+    }
+
+    function scheduleHistoryCapture() {
+      if (state.isRestoringHistory || !state.iframeReady) return;
+      if (state.historyTimer) clearTimeout(state.historyTimer);
+      state.historyTimer = setTimeout(() => {
+        state.historyTimer = null;
+        commitHistorySnapshot();
+      }, HISTORY_DEBOUNCE_MS);
+    }
+
+    function flushHistoryCapture() {
+      if (!state.historyTimer) return;
+      clearTimeout(state.historyTimer);
+      state.historyTimer = null;
+      commitHistorySnapshot();
+    }
+
+    function commitHistorySnapshot() {
+      if (state.isRestoringHistory || !state.iframeReady) return;
+      const snapshot = getCurrentPreviewHTML();
+      if (state.history[state.historyIndex] === snapshot) {
+        setDirty(snapshot !== state.savedSnapshot);
+        return;
+      }
+      state.history = state.history.slice(0, state.historyIndex + 1);
+      state.history.push(snapshot);
+      if (state.history.length > HISTORY_LIMIT) {
+        state.history.shift();
+      }
+      state.historyIndex = state.history.length - 1;
+      setDirty(snapshot !== state.savedSnapshot);
+    }
+
+    function restoreHistorySnapshot(snapshot) {
+      if (!snapshot || state.isRestoringHistory) return;
+      state.isRestoringHistory = true;
+      setDirty(snapshot !== state.savedSnapshot);
+      loadIntoIframe(snapshot, { preserveEditMode: true });
+    }
+
+    function undo() {
+      flushHistoryCapture();
+      if (state.isRestoringHistory || state.historyIndex <= 0) return;
+      state.historyIndex -= 1;
+      restoreHistorySnapshot(state.history[state.historyIndex]);
+    }
+
+    function redo() {
+      flushHistoryCapture();
+      if (state.isRestoringHistory || state.historyIndex >= state.history.length - 1) return;
+      state.historyIndex += 1;
+      restoreHistorySnapshot(state.history[state.historyIndex]);
+    }
+
+    function handleEditorShortcut(e) {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey) return false;
+      const key = e.key.toLowerCase();
+      if (key === 's') {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!btnSave.disabled) saveFile();
+        return true;
+      }
+      if (key === 'z') {
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.shiftKey) redo();
+        else undo();
+        return true;
+      }
+      if (key === 'y') {
+        e.preventDefault();
+        e.stopPropagation();
+        redo();
+        return true;
+      }
+      return false;
+    }
+
+    btnOpen.addEventListener('click', () => fileInput.click());
+
+    fileInput.addEventListener('change', e => {
+      const file = e.target.files[0];
+      if (file) loadFile(file);
+      fileInput.value = '';
+    });
+
+    function loadFile(file) {
+      const reader = new FileReader();
+      reader.onload = e => {
+        state.originalHTML = e.target.result;
+        state.currentFileName = file.name;
+        fileName.textContent = file.name;
+        btnSave.disabled = false;
+        btnReset.disabled = false;
+        toggleEdit.disabled = false;
+        toggleScripts.disabled = false;
+        setDirty(false);
+        loadIntoIframe(state.originalHTML, { resetHistory: true });
+      };
+      reader.onerror = () => alert('读取文件失败: ' + file.name);
+      reader.readAsText(file, 'utf-8');
+    }
+
+    function loadIntoIframe(html, options = {}) {
+      const preserveEditMode = options.preserveEditMode === true;
+      deactivateTextEditing();
+      unbindEditModeEvents();
+      if (state.isEditMode && !preserveEditMode) {
+        state.isEditMode = false;
+        toggleEdit.checked = false;
+        editHint.classList.remove('visible');
+      }
+      hideColorPanel();
+      state.pendingHistoryReset = options.resetHistory === true;
+      state.iframeReady = false;
+      updateViewerSandbox();
+      viewer.srcdoc = html;
+      viewer.classList.add('loaded');
+      placeholder.style.display = 'none';
+    }
+
+    function updateViewerSandbox() {
+      viewer.setAttribute('sandbox', state.allowScripts ? 'allow-same-origin allow-scripts' : 'allow-same-origin');
+    }
+
+    function getCurrentPreviewHTML() {
+      const doc = viewer.contentDocument;
+      if (!doc) return state.originalHTML;
+      const clone = doc.documentElement.cloneNode(true);
+      const clonedBody = clone.querySelector('body');
+      if (clonedBody) {
+        clonedBody.removeAttribute('contenteditable');
+        clonedBody.style.cursor = '';
+      }
+      cleanupClonedEditorState(clone);
+      let html = clone.outerHTML;
+      if (!/^<!DOCTYPE/i.test(html)) {
+        html = '<!DOCTYPE html>\n' + html;
+      }
+      return html;
+    }
+
+    viewer.addEventListener('load', () => {
+      if (viewer.srcdoc) {
+        state.iframeReady = true;
+        if (state.isEditMode) {
+          const doc = viewer.contentDocument;
+          editHint.classList.add('visible');
+          bindEditModeEvents();
+        }
+        if (state.pendingHistoryReset) {
+          resetHistory(getCurrentPreviewHTML());
+          state.pendingHistoryReset = false;
+        }
+        state.isRestoringHistory = false;
+      }
+    });
+
+    btnSave.addEventListener('click', saveFile);
+
+    async function saveFile() {
+      if (!state.iframeReady || state.isSaving) return;
+      flushHistoryCapture();
+      const doc = viewer.contentDocument;
+      if (!doc) return;
+      const previousSaveText = btnSave.textContent;
+      state.isSaving = true;
+      btnSave.disabled = true;
+      btnSave.textContent = '保存中...';
+      try {
+        // 克隆一份再清理,避免影响活的 DOM(保留用户的光标位置)
+        const clone = doc.documentElement.cloneNode(true);
+        await inlineLoadedImages(doc, clone);
+        const clonedBody = clone.querySelector('body');
+        if (clonedBody) {
+          clonedBody.removeAttribute('contenteditable');
+          // 移除编辑器可能加在 body 上的 inline 样式
+          clonedBody.style.cursor = '';
+        }
+        cleanupClonedEditorState(clone);
+        let html = clone.outerHTML;
+        if (!/^<!DOCTYPE/i.test(html)) {
+          html = '<!DOCTYPE html>\n' + html;
+        }
+        const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        const baseName = state.currentFileName.replace(/\.html?$/i, '') || 'untitled';
+        a.download = baseName + '-edited.html';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        state.savedSnapshot = getCurrentPreviewHTML();
+        setDirty(false);
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      } finally {
+        state.isSaving = false;
+        btnSave.disabled = false;
+        btnSave.textContent = previousSaveText;
+      }
+    }
+
+    async function inlineLoadedImages(sourceDoc, clonedRoot) {
+      const sourceImages = Array.from(sourceDoc.querySelectorAll('img'));
+      const clonedImages = Array.from(clonedRoot.querySelectorAll('img'));
+      await Promise.all(sourceImages.map(async (img, index) => {
+        const clonedImg = clonedImages[index];
+        if (!clonedImg) return;
+        const src = img.currentSrc || img.src || img.getAttribute('src');
+        if (!src || src.startsWith('data:')) return;
+        const dataUrl = await imageToDataUrl(img, src);
+        if (!dataUrl) return;
+        clonedImg.setAttribute('src', dataUrl);
+        clonedImg.removeAttribute('srcset');
+      }));
+    }
+
+    function cleanupClonedEditorState(clonedRoot) {
+      const activeText = clonedRoot.querySelector('[data-html-editor-active-text]');
+      if (!activeText) return;
+      if (state.activeTextOriginalContentEditable === null) {
+        activeText.removeAttribute('contenteditable');
+      } else {
+        activeText.setAttribute('contenteditable', state.activeTextOriginalContentEditable);
+      }
+      activeText.removeAttribute('data-html-editor-active-text');
+    }
+
+    async function imageToDataUrl(img, src) {
+      const fetched = await fetchImageAsDataUrl(src);
+      if (fetched) return fetched;
+      if (!img.complete || !img.naturalWidth || !img.naturalHeight) return null;
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+        return canvas.toDataURL('image/png');
+      } catch (err) {
+        return null;
+      }
+    }
+
+    async function fetchImageAsDataUrl(src) {
+      try {
+        const res = await fetch(src);
+        if (!res.ok) return null;
+        const blob = await res.blob();
+        return await blobToDataUrl(blob);
+      } catch (err) {
+        return null;
+      }
+    }
+
+    function blobToDataUrl(blob) {
+      return new Promise(resolve => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => resolve(null);
+        reader.readAsDataURL(blob);
+      });
+    }
+
+    btnReset.addEventListener('click', () => {
+      if (!state.originalHTML) return;
+      if (state.isDirty) {
+        if (!confirm('确定放弃所有修改,恢复到原始版本?')) return;
+      }
+      loadIntoIframe(state.originalHTML, { resetHistory: true });
+    });
+
+    document.addEventListener('dragover', e => {
+      e.preventDefault();
+      document.querySelector('.canvas').classList.add('drag-over');
+    });
+    document.addEventListener('dragleave', e => {
+      if (!e.relatedTarget) document.querySelector('.canvas').classList.remove('drag-over');
+    });
+    document.addEventListener('drop', e => {
+      e.preventDefault();
+      document.querySelector('.canvas').classList.remove('drag-over');
+      const file = e.dataTransfer.files[0];
+      if (file && /\.html?$/i.test(file.name)) {
+        loadFile(file);
+      } else if (file) {
+        alert('请拖入 .html 或 .htm 文件');
+      }
+    });
+
+    toggleEdit.addEventListener('change', () => {
+      if (!state.iframeReady) {
+        toggleEdit.checked = false;
+        return;
+      }
+      state.isEditMode = toggleEdit.checked;
+      if (state.isEditMode) enableEditMode();
+      else disableEditMode();
+    });
+
+    toggleScripts.addEventListener('change', () => {
+      if (!state.iframeReady) {
+        toggleScripts.checked = false;
+        return;
+      }
+      if (toggleScripts.checked) {
+        const ok = confirm('交互预览会执行当前 HTML 中的 JavaScript。只建议对可信的本地/AI 生成文件开启。继续吗?');
+        if (!ok) {
+          toggleScripts.checked = false;
+          return;
+        }
+      }
+      const html = getCurrentPreviewHTML();
+      state.allowScripts = toggleScripts.checked;
+      loadIntoIframe(html);
+    });
+
+    function enableEditMode() {
+      const doc = viewer.contentDocument;
+      if (!doc) return;
+      editHint.classList.add('visible');
+      bindEditModeEvents();
+    }
+
+    function disableEditMode() {
+      const doc = viewer.contentDocument;
+      if (!doc) return;
+      deactivateTextEditing();
+      editHint.classList.remove('visible');
+      unbindEditModeEvents();
+      hideColorPanel();
+      hoverOverlay.classList.remove('visible');
+      hideColorButtonNow();
+    }
+
+    function activateTextEditing(el) {
+      if (!el || el.nodeType !== Node.ELEMENT_NODE || state.activeTextElement === el) return;
+      deactivateTextEditing();
+      state.activeTextElement = el;
+      state.activeTextOriginalContentEditable = el.getAttribute('contenteditable');
+      el.setAttribute('contenteditable', 'plaintext-only');
+      el.setAttribute('data-html-editor-active-text', '');
+    }
+
+    function deactivateTextEditing() {
+      const el = state.activeTextElement;
+      if (!el) return;
+      if (state.activeTextOriginalContentEditable === null) {
+        el.removeAttribute('contenteditable');
+      } else {
+        el.setAttribute('contenteditable', state.activeTextOriginalContentEditable);
+      }
+      el.removeAttribute('data-html-editor-active-text');
+      state.activeTextElement = null;
+      state.activeTextOriginalContentEditable = null;
+    }
+
+    let boundHandlers = null;
+
+    function bindEditModeEvents() {
+      const doc = viewer.contentDocument;
+      if (!doc) return;
+      unbindEditModeEvents();
+
+      const handleMouseMove = (e) => {
+        if (!state.isEditMode) return;
+        if (state.selectedElement) {
+          hoverOverlay.classList.remove('visible');
+          showColorButton(state.selectedElement);
+          return;
+        }
+        const el = e.target;
+        if (!isValidElement(el)) {
+          hoverOverlay.classList.remove('visible');
+          hideColorButton();
+          return;
+        }
+        state.hoveredElement = el;
+        updateOverlayPosition(hoverOverlay, el);
+        hoverOverlay.classList.add('visible');
+        showColorButton(el);
+      };
+
+      const handleMouseLeave = () => {
+        hoverOverlay.classList.remove('visible');
+        hideColorButton();
+      };
+
+      const handleMouseDown = (e) => {
+        if (!state.isEditMode) return;
+        // 点击位置是否落在文字上(用 caretPosition 精确判断)
+        if (isPointInText(e.clientX, e.clientY, e.target)) {
+          activateTextEditing(e.target);
+          e.stopPropagation();
+          return;
+        }
+        deactivateTextEditing();
+        if (!isValidElement(e.target)) return;
+        e.preventDefault();
+        e.stopPropagation();
+      };
+
+      const handleClick = (e) => {
+        if (!state.isEditMode) return;
+        const el = e.target;
+        if (el === doc.body || el === doc.documentElement) {
+          hideColorPanel();
+          return;
+        }
+        // 点击位置是否落在文字上 → 交给浏览器原生处理(进入文字编辑)
+        if (isPointInText(e.clientX, e.clientY, e.target)) {
+          e.stopPropagation();
+          return;
+        }
+        if (!isValidElement(el)) {
+          hideColorPanel();
+          return;
+        }
+        e.preventDefault();
+        e.stopPropagation();
+        selectElement(el);
+      };
+
+      const handleKeyDown = (e) => {
+        if (handleEditorShortcut(e)) return;
+        if (state.isEditMode) e.stopPropagation();
+        if (e.key !== 'Backspace' && e.key !== 'Delete') return;
+        const sel = doc.getSelection();
+        if (!sel || !sel.isCollapsed) return;
+        if (!sel.rangeCount) {
+          e.preventDefault();
+          return;
+        }
+        const range = sel.getRangeAt(0);
+        const node = range.startContainer;
+        if (node.nodeType !== Node.TEXT_NODE) {
+          e.preventDefault();
+          return;
+        }
+        const text = node.textContent;
+        const offset = range.startOffset;
+        if (e.key === 'Backspace' && offset === 0) {
+          const parent = node.parentNode;
+          if (parent && parent.textContent.trim() === '' &&
+              parent.children.length === 0 &&
+              parent !== doc.body) {
+            e.preventDefault();
+          }
+        } else if (e.key === 'Delete' && offset === text.length) {
+          e.preventDefault();
+        }
+      };
+
+      const handleBeforeInput = (e) => {
+        if (!state.isEditMode) return;
+        e.stopPropagation();
+        const inputType = e.inputType || '';
+        const blockedTypes = [
+          'insertParagraph',
+          'insertLineBreak',
+          'insertOrderedList',
+          'insertUnorderedList',
+          'insertHorizontalRule',
+          'formatBold',
+          'formatItalic',
+          'formatUnderline',
+          'formatStrikeThrough',
+        ];
+        if (blockedTypes.includes(inputType) || inputType.startsWith('format')) {
+          e.preventDefault();
+          return;
+        }
+        if (inputType === 'insertFromPaste' || inputType === 'insertFromDrop' || inputType === 'insertHTML') {
+          e.preventDefault();
+          return;
+        }
+        if (inputType.startsWith('delete') || inputType === 'insertText') {
+          if (!isSafeTextSelection(doc, inputType)) {
+            e.preventDefault();
+            return;
+          }
+        }
+      };
+
+      const handleInput = () => {
+        setDirty(true);
+        scheduleHistoryCapture();
+        refreshFloatingUI();
+      };
+
+      const handlePaste = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const text = (e.clipboardData || window.clipboardData).getData('text/plain');
+        if (text && isSafeTextSelection(doc, 'insertText')) {
+          doc.execCommand('insertText', false, text);
+          setDirty(true);
+          scheduleHistoryCapture();
+          refreshFloatingUI();
+        }
+      };
+
+      const handleDrop = (e) => e.preventDefault();
+      const handleDragOver = (e) => e.preventDefault();
+      const handleScrollOrResize = () => refreshFloatingUI();
+
+      doc.addEventListener('mousemove', handleMouseMove, true);
+      doc.addEventListener('mouseleave', handleMouseLeave, true);
+      doc.addEventListener('mousedown', handleMouseDown, true);
+      doc.addEventListener('click', handleClick, true);
+      doc.addEventListener('keydown', handleKeyDown, true);
+      doc.addEventListener('beforeinput', handleBeforeInput, true);
+      doc.addEventListener('input', handleInput, true);
+      doc.addEventListener('paste', handlePaste, true);
+      doc.addEventListener('drop', handleDrop, true);
+      doc.addEventListener('dragover', handleDragOver, true);
+      doc.addEventListener('scroll', handleScrollOrResize, true);
+      window.addEventListener('resize', handleScrollOrResize);
+
+      boundHandlers = {
+        handleMouseMove, handleMouseLeave, handleMouseDown, handleClick,
+        handleKeyDown, handleBeforeInput, handleInput, handlePaste,
+        handleDrop, handleDragOver, handleScrollOrResize,
+      };
+    }
+
+    function unbindEditModeEvents() {
+      const doc = viewer.contentDocument;
+      if (!doc || !boundHandlers) return;
+      const f = boundHandlers;
+      doc.removeEventListener('mousemove', f.handleMouseMove, true);
+      doc.removeEventListener('mouseleave', f.handleMouseLeave, true);
+      doc.removeEventListener('mousedown', f.handleMouseDown, true);
+      doc.removeEventListener('click', f.handleClick, true);
+      doc.removeEventListener('keydown', f.handleKeyDown, true);
+      doc.removeEventListener('beforeinput', f.handleBeforeInput, true);
+      doc.removeEventListener('input', f.handleInput, true);
+      doc.removeEventListener('paste', f.handlePaste, true);
+      doc.removeEventListener('drop', f.handleDrop, true);
+      doc.removeEventListener('dragover', f.handleDragOver, true);
+      doc.removeEventListener('scroll', f.handleScrollOrResize, true);
+      window.removeEventListener('resize', f.handleScrollOrResize);
+      boundHandlers = null;
+    }
+
+    function isSafeTextSelection(doc, inputType) {
+      const sel = doc.getSelection();
+      if (!sel || !sel.rangeCount) return false;
+      const range = sel.getRangeAt(0);
+      const start = range.startContainer;
+      const end = range.endContainer;
+      if (start.nodeType !== Node.TEXT_NODE || end.nodeType !== Node.TEXT_NODE) return false;
+      if (start !== end) return false;
+      if (!range.collapsed) return true;
+      const textLength = start.textContent.length;
+      if (inputType === 'deleteContentBackward') return range.startOffset > 0;
+      if (inputType === 'deleteContentForward') return range.startOffset < textLength;
+      if (inputType.startsWith('delete')) return false;
+      return true;
+    }
+
+    function isValidElement(el) {
+      if (!el || el.nodeType !== Node.ELEMENT_NODE) return false;
+      const tag = el.tagName.toLowerCase();
+      const skipTags = ['html', 'head', 'body', 'meta', 'link', 'script', 'style', 'title', 'br', 'hr', 'noscript'];
+      if (skipTags.includes(tag)) return false;
+      const rect = el.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0;
+    }
+
+    // 精确判断点击坐标是否落在文字节点上
+    // (不能用 e.target 判断:点击文字时 Chrome 返回的是父元素,不是 Text 节点)
+    function isPointInText(x, y, target) {
+      const doc = viewer.contentDocument;
+      if (!doc) return false;
+      const root = target && target.nodeType === Node.ELEMENT_NODE ? target : doc.body;
+      if (!root) return false;
+      const walker = doc.createTreeWalker(root, doc.defaultView.NodeFilter.SHOW_TEXT);
+      let textNode = walker.nextNode();
+      while (textNode) {
+        if (textNode.textContent.trim()) {
+          const textRange = doc.createRange();
+          textRange.selectNodeContents(textNode);
+          const hit = Array.from(textRange.getClientRects()).some(rect =>
+            x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom
+          );
+          if (hit) return true;
+        }
+        textNode = walker.nextNode();
+      }
+      return false;
+    }
+
+    function updateOverlayPosition(overlay, el) {
+      const rect = el.getBoundingClientRect();
+      const iframeRect = viewer.getBoundingClientRect();
+      overlay.style.left = (rect.left + iframeRect.left) + 'px';
+      overlay.style.top = (rect.top + iframeRect.top) + 'px';
+      overlay.style.width = rect.width + 'px';
+      overlay.style.height = rect.height + 'px';
+      if (overlay === selectedOverlay) {
+        selectionSize.textContent = Math.round(rect.width) + ' × ' + Math.round(rect.height);
+      }
+    }
+
+    function refreshFloatingUI() {
+      if (state.selectedElement && isValidElement(state.selectedElement)) {
+        updateOverlayPosition(selectedOverlay, state.selectedElement);
+        state.hoveredElement = state.selectedElement;
+        showColorButton(state.selectedElement);
+        if (!colorPanel.hidden) positionColorPanel(state.selectedElement);
+      } else {
+        selectedOverlay.classList.remove('visible');
+      }
+      if (state.hoveredElement && isValidElement(state.hoveredElement) && !state.selectedElement) {
+        updateOverlayPosition(hoverOverlay, state.hoveredElement);
+        showColorButton(state.hoveredElement);
+      } else {
+        hoverOverlay.classList.remove('visible');
+      }
+    }
+
+    // ============== PPT 式拖动与缩放 ==============
+    const MIN_ELEMENT_SIZE = 12;
+
+    function readElementTranslate(el) {
+      const raw = viewer.contentWindow.getComputedStyle(el).translate;
+      if (!raw || raw === 'none') return { x: 0, y: 0 };
+      const values = raw.match(/-?\d*\.?\d+(?:e[+-]?\d+)?/ig) || [];
+      return {
+        x: Number(values[0]) || 0,
+        y: Number(values[1]) || 0,
+      };
+    }
+
+    function setElementTranslate(el, x, y) {
+      el.style.setProperty('translate', roundGeometry(x) + 'px ' + roundGeometry(y) + 'px');
+    }
+
+    function roundGeometry(value) {
+      return Math.round(value * 10) / 10;
+    }
+
+    function prepareElementForResize(active) {
+      if (active.prepared) return;
+      const el = active.el;
+      const win = viewer.contentWindow;
+      const computed = win.getComputedStyle(el);
+      if (computed.display === 'inline') el.style.display = 'inline-block';
+      el.style.boxSizing = 'border-box';
+      const parentDisplay = el.parentElement ? win.getComputedStyle(el.parentElement).display : '';
+      if (parentDisplay.includes('flex')) {
+        el.style.flexGrow = '0';
+        el.style.flexShrink = '0';
+        el.style.flexBasis = 'auto';
+      }
+      active.prepared = true;
+    }
+
+    function beginElementTransform(e) {
+      if (!state.isEditMode || !state.selectedElement || e.button !== 0) return;
+      flushHistoryCapture();
+      const handleEl = e.target.closest('.resize-handle');
+      const handle = handleEl ? handleEl.dataset.handle : '';
+      const rect = state.selectedElement.getBoundingClientRect();
+      const translate = readElementTranslate(state.selectedElement);
+      state.activeTransform = {
+        el: state.selectedElement,
+        mode: handle ? 'resize' : 'drag',
+        handle,
+        pointerId: e.pointerId,
+        startX: e.clientX,
+        startY: e.clientY,
+        startWidth: rect.width,
+        startHeight: rect.height,
+        startTranslateX: translate.x,
+        startTranslateY: translate.y,
+        aspectRatio: rect.height ? rect.width / rect.height : 1,
+        prepared: false,
+        changed: false,
+      };
+      selectedOverlay.classList.add('transforming');
+      selectedOverlay.setPointerCapture(e.pointerId);
+      e.preventDefault();
+      e.stopPropagation();
+    }
+
+    function updateElementTransform(e) {
+      const active = state.activeTransform;
+      if (!active || active.pointerId !== e.pointerId) return;
+      const dx = e.clientX - active.startX;
+      const dy = e.clientY - active.startY;
+
+      if (active.mode === 'drag') {
+        if (Math.abs(dx) < 0.1 && Math.abs(dy) < 0.1) return;
+        setElementTranslate(
+          active.el,
+          active.startTranslateX + dx,
+          active.startTranslateY + dy
+        );
+      } else {
+        const horizontal = active.handle.includes('e') || active.handle.includes('w');
+        const vertical = active.handle.includes('n') || active.handle.includes('s');
+        let width = active.startWidth;
+        let height = active.startHeight;
+
+        if (active.handle.includes('e')) width += dx;
+        if (active.handle.includes('w')) width -= dx;
+        if (active.handle.includes('s')) height += dy;
+        if (active.handle.includes('n')) height -= dy;
+
+        if (e.shiftKey && horizontal && vertical) {
+          const widthChange = Math.abs(width - active.startWidth) / Math.max(active.startWidth, 1);
+          const heightChange = Math.abs(height - active.startHeight) / Math.max(active.startHeight, 1);
+          if (widthChange >= heightChange) height = width / active.aspectRatio;
+          else width = height * active.aspectRatio;
+        }
+
+        width = Math.max(MIN_ELEMENT_SIZE, width);
+        height = Math.max(MIN_ELEMENT_SIZE, height);
+        prepareElementForResize(active);
+
+        if (horizontal) {
+          active.el.style.maxWidth = 'none';
+          active.el.style.minWidth = '0';
+          active.el.style.width = roundGeometry(width) + 'px';
+        }
+        if (vertical) {
+          active.el.style.maxHeight = 'none';
+          active.el.style.minHeight = '0';
+          active.el.style.height = roundGeometry(height) + 'px';
+        }
+
+        const translateX = active.startTranslateX + (active.handle.includes('w') ? active.startWidth - width : 0);
+        const translateY = active.startTranslateY + (active.handle.includes('n') ? active.startHeight - height : 0);
+        if (active.handle.includes('w') || active.handle.includes('n')) {
+          setElementTranslate(active.el, translateX, translateY);
+        }
+      }
+
+      if (!active.changed) {
+        active.changed = true;
+        setDirty(true);
+      }
+      refreshFloatingUI();
+      e.preventDefault();
+    }
+
+    function finishElementTransform(e) {
+      const active = state.activeTransform;
+      if (!active || (e && active.pointerId !== e.pointerId)) return;
+      if (selectedOverlay.hasPointerCapture(active.pointerId)) {
+        selectedOverlay.releasePointerCapture(active.pointerId);
+      }
+      state.activeTransform = null;
+      selectedOverlay.classList.remove('transforming');
+      if (active.changed) commitHistorySnapshot();
+      refreshFloatingUI();
+    }
+
+    selectedOverlay.addEventListener('pointerdown', beginElementTransform);
+    document.addEventListener('pointermove', updateElementTransform);
+    document.addEventListener('pointerup', finishElementTransform);
+    document.addEventListener('pointercancel', finishElementTransform);
+
+    // ============== 浮动色板按钮 ==============
+    let hideButtonTimer = null;
+    const BTN_SIZE = 28;
+
+    function showColorButton(el) {
+      if (hideButtonTimer) {
+        clearTimeout(hideButtonTimer);
+        hideButtonTimer = null;
+      }
+      const rect = el.getBoundingClientRect();
+      const iframeRect = viewer.getBoundingClientRect();
+      // 放在元素右上角内侧,稍微凸出一半
+      const left = rect.right + iframeRect.left - BTN_SIZE + 4;
+      const top = rect.top + iframeRect.top - 4;
+      // 防止按钮超出视口
+      const maxLeft = window.innerWidth - BTN_SIZE - 4;
+      const maxTop = window.innerHeight - BTN_SIZE - 4;
+      colorButton.style.left = Math.max(4, Math.min(maxLeft, left)) + 'px';
+      colorButton.style.top = Math.max(4, Math.min(maxTop, top)) + 'px';
+      colorButton.hidden = false;
+    }
+
+    function hideColorButton() {
+      if (hideButtonTimer) clearTimeout(hideButtonTimer);
+      // 延时 100ms,给用户从 iframe 移到按钮的时间
+      hideButtonTimer = setTimeout(() => {
+        colorButton.hidden = true;
+        state.hoveredElement = null;
+        hideButtonTimer = null;
+      }, 100);
+    }
+
+    function hideColorButtonNow() {
+      if (hideButtonTimer) {
+        clearTimeout(hideButtonTimer);
+        hideButtonTimer = null;
+      }
+      colorButton.hidden = true;
+      state.hoveredElement = null;
+    }
+
+    // 鼠标进入按钮 → 取消隐藏
+    colorButton.addEventListener('mouseenter', () => {
+      if (hideButtonTimer) {
+        clearTimeout(hideButtonTimer);
+        hideButtonTimer = null;
+      }
+    });
+    // 鼠标离开按钮 → 延时隐藏
+    colorButton.addEventListener('mouseleave', hideColorButton);
+
+    // 点击按钮 → 弹出当前 hover 元素的色板
+    colorButton.addEventListener('click', e => {
+      e.stopPropagation();
+      e.preventDefault();
+      if (state.hoveredElement) {
+        const el = state.hoveredElement;
+        hideColorButtonNow();
+        showColorPanel(el);
+      }
+    });
+
+    function selectElement(el) {
+      state.selectedElement = el;
+      state.hoveredElement = el;
+      hoverOverlay.classList.remove('visible');
+      updateOverlayPosition(selectedOverlay, el);
+      selectedOverlay.classList.add('visible');
+      showColorButton(el);
+    }
+
+    function showColorPanel(el) {
+      selectElement(el);
+
+      const win = viewer.contentWindow;
+      const computed = win.getComputedStyle(el);
+      const bg = computed.backgroundColor;
+      const text = computed.color;
+
+      elTag.textContent = describeElement(el);
+      elTag.title = describeElement(el);
+
+      const bgHex = rgbToHex(bg) || '#ffffff';
+      const textHex = rgbToHex(text) || '#000000';
+      bgColor.value = bgHex;
+      bgColorText.value = bgHex;
+      textColor.value = textHex;
+      textColorText.value = textHex;
+
+      positionColorPanel(el);
+      colorPanel.hidden = false;
+    }
+
+    function positionColorPanel(el) {
+      if (!el || !isValidElement(el)) return;
+      const rect = el.getBoundingClientRect();
+      const iframeRect = viewer.getBoundingClientRect();
+      const panelHeight = 280;
+      const panelWidth = 270;
+      let top = rect.bottom + iframeRect.top + 8;
+      let left = rect.left + iframeRect.left;
+
+      if (top + panelHeight > window.innerHeight - 8) {
+        top = rect.top + iframeRect.top - panelHeight - 8;
+      }
+      if (left + panelWidth > window.innerWidth - 8) {
+        left = window.innerWidth - panelWidth - 8;
+      }
+
+      colorPanel.style.top = Math.max(8, top) + 'px';
+      colorPanel.style.left = Math.max(8, left) + 'px';
+    }
+
+    function describeElement(el) {
+      let desc = el.tagName.toLowerCase();
+      if (el.id) desc += '#' + el.id;
+      if (el.className && typeof el.className === 'string') {
+        const cls = el.className.trim().split(/\s+/).slice(0, 2).join('.');
+        if (cls) desc += '.' + cls;
+      }
+      return desc;
+    }
+
+    function hideColorPanel(clearSelection = true) {
+      finishElementTransform();
+      colorPanel.hidden = true;
+      if (clearSelection) {
+        selectedOverlay.classList.remove('visible');
+        state.selectedElement = null;
+        hideColorButtonNow();
+      } else if (state.selectedElement) {
+        showColorButton(state.selectedElement);
+      }
+      // 关闭面板后,鼠标可能已经在某个元素上 → 重新显示 hover 状态
+      // 这里什么都不做,鼠标移动时会自然恢复
+    }
+
+    function applyColor(prop, value) {
+      if (!state.selectedElement) return;
+      const before = state.selectedElement.style[prop];
+      if (value === null || value === '') {
+        state.selectedElement.style[prop] = '';
+      } else {
+        state.selectedElement.style[prop] = value;
+      }
+      if (state.selectedElement.style[prop] !== before) {
+        setDirty(true);
+        scheduleHistoryCapture();
+      }
+      const win = viewer.contentWindow;
+      const computed = win.getComputedStyle(state.selectedElement);
+      if (prop === 'backgroundColor') {
+        const hex = rgbToHex(computed.backgroundColor) || '#ffffff';
+        bgColor.value = hex;
+        bgColorText.value = hex;
+      } else if (prop === 'color') {
+        const hex = rgbToHex(computed.color) || '#000000';
+        textColor.value = hex;
+        textColorText.value = hex;
+      }
+    }
+
+    function rgbToHex(rgb) {
+      if (!rgb || rgb === 'transparent' || rgb === 'rgba(0, 0, 0, 0)') {
+        return null;
+      }
+      const match = rgb.match(/rgba?\(([^)]+)\)/);
+      if (!match) {
+        if (rgb.startsWith('#')) {
+          return rgb.length === 4 ? expandShortHex(rgb) : rgb.toLowerCase();
+        }
+        return null;
+      }
+      const parts = match[1].split(',').map(s => parseInt(s.trim(), 10));
+      if (parts.length < 3 || parts.some(isNaN)) return null;
+      const [r, g, b] = parts;
+      return '#' + [r, g, b].map(n => Math.max(0, Math.min(255, n)).toString(16).padStart(2, '0')).join('');
+    }
+
+    function expandShortHex(hex) {
+      return '#' + hex[1] + hex[1] + hex[2] + hex[2] + hex[3] + hex[3];
+    }
+
+    function normalizeHex(val) {
+      if (!val) return null;
+      val = val.trim();
+      if (!val.startsWith('#')) val = '#' + val;
+      if (/^#[0-9a-fA-F]{3}$/.test(val)) return expandShortHex(val.toLowerCase());
+      if (/^#[0-9a-fA-F]{6}$/.test(val)) return val.toLowerCase();
+      return null;
+    }
+
+    bgColor.addEventListener('input', e => {
+      const val = e.target.value;
+      bgColorText.value = val;
+      applyColor('backgroundColor', val);
+    });
+    bgColorText.addEventListener('input', e => {
+      const val = e.target.value;
+      const normalized = normalizeHex(val);
+      if (normalized) {
+        bgColor.value = normalized;
+        applyColor('backgroundColor', normalized);
+      }
+    });
+    textColor.addEventListener('input', e => {
+      const val = e.target.value;
+      textColorText.value = val;
+      applyColor('color', val);
+    });
+    textColorText.addEventListener('input', e => {
+      const val = e.target.value;
+      const normalized = normalizeHex(val);
+      if (normalized) {
+        textColor.value = normalized;
+        applyColor('color', normalized);
+      }
+    });
+
+    document.querySelectorAll('.clear-btn').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        applyColor(btn.dataset.clear, '');
+      });
+    });
+
+    panelClose.addEventListener('click', () => hideColorPanel(false));
+
+    document.addEventListener('keydown', e => {
+      if (handleEditorShortcut(e)) return;
+      if (e.key === 'Escape' && state.activeTransform) {
+        finishElementTransform();
+      }
+      if (e.key === 'Escape' && !colorPanel.hidden) {
+        hideColorPanel(false);
+      } else if (e.key === 'Escape' && state.selectedElement) {
+        hideColorPanel(true);
+      }
+    });
+
+    initSwatches();
+  })();
+  </script>
+</body>
+</html>

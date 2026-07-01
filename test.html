@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>测试 HTML - 编辑器验证用</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+      color: #1f2937;
+      line-height: 1.6;
+    }
+    .hero {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 80px 40px;
+      text-align: center;
+    }
+    .hero h1 { font-size: 48px; margin: 0 0 16px; }
+    .hero p { font-size: 18px; opacity: 0.9; }
+    .container { max-width: 960px; margin: 0 auto; padding: 40px 24px; }
+    .card {
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 16px;
+    }
+    .card.highlight {
+      background: #fef3c7;
+      border-color: #fbbf24;
+    }
+    .card h2 { margin: 0 0 12px; color: #111827; }
+    .card p { margin: 0; color: #4b5563; }
+    .tag {
+      display: inline-block;
+      background: #dbeafe;
+      color: #1e40af;
+      padding: 4px 12px;
+      border-radius: 999px;
+      font-size: 12px;
+      margin-right: 6px;
+    }
+    .tag.warm { background: #fee2e2; color: #991b1b; }
+    .tag.green { background: #d1fae5; color: #065f46; }
+    footer {
+      background: #1f2937;
+      color: #9ca3af;
+      text-align: center;
+      padding: 24px;
+      margin-top: 40px;
+    }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>这是一个测试页面</h1>
+    <p>用编辑器打开这个文件,体验改文字和改颜色的功能</p>
+  </div>
+
+  <div class="container">
+    <div class="card">
+      <h2>第一张卡片</h2>
+      <p>这是一段普通正文。试着点击它,可以直接修改文字内容。</p>
+    </div>
+
+    <div class="card highlight">
+      <h2>第二张卡片(高亮)</h2>
+      <p>这张卡片用了不同的背景色和边框色。点击卡片周围空白处,可以改变它的颜色。</p>
+      <div style="margin-top: 12px;">
+        <span class="tag">标签 1</span>
+        <span class="tag warm">标签 2</span>
+        <span class="tag green">标签 3</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>第三张卡片</h2>
+      <p>每张卡片的颜色都是独立的。改其中一张不会影响其他卡片。</p>
+    </div>
+  </div>
+
+  <footer>
+    <p>© 2026 HTML 编辑器 · 测试页面</p>
+  </footer>
+</body>
+</html>
